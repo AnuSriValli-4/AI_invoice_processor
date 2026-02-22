@@ -76,7 +76,6 @@ function App() {
     <div style={{ width: '100vw', minHeight: '100vh', fontFamily: 'sans-serif', backgroundColor: '#f4f7f6', display: 'flex', flexDirection: 'column' }}>
       <header style={{ width: '100%', padding: '60px 0', textAlign: 'center', backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0', marginBottom: '50px' }}>
         <h1 style={{ color: '#1e293b', fontSize: '3rem', margin: '0 0 10px 0' }}>AI Invoice Processor</h1>
-        <p style={{ color: '#64748b', fontSize: '1.2rem' }}>Bulk process documents directly to Supabase</p>
       </header>
       
       <div style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '0 20px' }}>
@@ -149,7 +148,7 @@ function App() {
               style={{ width: '100%', padding: '15px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '1.1rem' }}
             >
               <Download size={20} style={{ verticalAlign: 'middle', marginRight: '10px' }} />
-              Download Consolidated Report ({data.length})
+              Download Consolidated Report 
             </button>
           </div>
         </div>
