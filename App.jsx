@@ -3,18 +3,20 @@ import axios from 'axios';
 import { CheckCircle, Loader2, Download, UploadCloud } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
+const BACKEND_URL = "https://ai-invoice-processor-backend.onrender.com";
+
 function App() {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState([]);
   const [showSuccess, setShowSuccess] = useState(false);
   const [currentProgress, setCurrentProgress] = useState(0);
-  const [isDragging, setIsDragging] = useState(false); // Track drag state
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     const loadInvoices = async () => {
       try {
-        const response = await axios.get('http://127.0.0.1:8000/invoices');
+        const response = await axios.get(`${BACKEND_URL}/invoices`);
         setData(response.data); 
       } catch (error) {
         console.error("History fetch failed:", error);
@@ -23,7 +25,6 @@ function App() {
     loadInvoices();
   }, []);
 
-  // --- Drag & Drop Handlers ---
   const handleDragOver = (e) => {
     e.preventDefault();
     setIsDragging(true);
@@ -49,7 +50,7 @@ function App() {
       const formData = new FormData();
       formData.append('file', files[i]);
       try {
-        const response = await axios.post('http://127.0.0.1:8000/upload', formData);
+        const response = await axios.post(`${BACKEND_URL}/upload`, formData);
         setData(prev => [response.data.data, ...prev]);
         setCurrentProgress(i + 1);
       } catch (error) {
@@ -83,7 +84,6 @@ function App() {
           
           <div style={{ backgroundColor: 'white', padding: '40px', borderRadius: '16px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)', textAlign: 'center' }}>
             
-            {/* Drag & Drop Zone */}
             <div 
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
@@ -113,7 +113,6 @@ function App() {
               />
             </div>
 
-            {/* List of Selected Files */}
             {files.length > 0 && (
               <div style={{ textAlign: 'left', marginBottom: '20px', padding: '10px', backgroundColor: '#f1f5f9', borderRadius: '8px' }}>
                 <p style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>Selected Files ({files.length}):</p>
