@@ -1,158 +1,138 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import { CheckCircle, Loader2, Download, UploadCloud } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { useDropzone } from 'react-dropzone';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import * as XLSX from 'xlsx';
+import './App.css';
 
 const BACKEND_URL = "https://ai-invoice-processor-backend.onrender.com";
 
 function App() {
-  const [files, setFiles] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [data, setData] = useState([]);
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [currentProgress, setCurrentProgress] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
 
-  useEffect(() => {
-    const loadInvoices = async () => {
-      try {
-        const response = await axios.get(`${BACKEND_URL}/invoices`);
-        setData(response.data); 
-      } catch (error) {
-        console.error("History fetch failed:", error);
-      }
-    };
-    loadInvoices();
-  }, []);
+  // Count invoices by date
+  const chartData = useMemo(() => {
+    const counts = data.reduce((acc, curr) => {
+      const date = curr.invoice_date || 'Unknown';
+      acc[date] = (acc[date] || 0) + 1;
+      return acc;
+    }, {});
+    return Object.keys(counts).map(date => ({ date, count: counts[date] }));
+  }, [data]);
 
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = () => {
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const droppedFiles = Array.from(e.dataTransfer.files);
-    setFiles(prev => [...prev, ...droppedFiles]);
-  };
-
-  const handleUpload = async () => {
-    if (files.length === 0) return alert("Please select or drop files first!");
+  const onDrop = async (acceptedFiles) => {
     setLoading(true);
-    setCurrentProgress(0);
-
-    for (let i = 0; i < files.length; i++) {
+    setStatusMessage(`Processing ${acceptedFiles.length} files...`);
+    
+    for (const file of acceptedFiles) {
       const formData = new FormData();
-      formData.append('file', files[i]);
+      formData.append('file', file);
+
       try {
-        const response = await axios.post(`${BACKEND_URL}/upload`, formData);
-        setData(prev => [response.data.data, ...prev]);
-        setCurrentProgress(i + 1);
+        const response = await fetch(`${BACKEND_URL}/upload`, {
+          method: 'POST',
+          body: formData,
+        });
+        const result = await response.json();
+        setData(prev => [...prev, { ...result, source_file: file.name, status: 'Processed' }]);
       } catch (error) {
-        console.error(`Error with file ${i + 1}:`, error);
+        console.error("Error uploading file:", file.name);
+        setData(prev => [...prev, { source_file: file.name, status: 'Failed', vendor_name: 'Error' }]);
       }
     }
-
+    
     setLoading(false);
-    setShowSuccess(true); 
-    setFiles([]); 
-    setTimeout(() => setShowSuccess(false), 5000); 
+    setStatusMessage("Processing complete!"); 
   };
 
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
+
   const exportToExcel = () => {
-    if (data.length === 0) return alert("No data to export!");
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Invoices");
-    XLSX.writeFile(workbook, "Invoices_Consolidated.xlsx");
+    XLSX.writeFile(workbook, "Consolidated_Invoices.xlsx");
   };
 
+  const unprocessedCount = data.filter(d => d.status === 'Failed').length;
+
   return (
-    <div style={{ width: '100vw', minHeight: '100vh', fontFamily: 'sans-serif', backgroundColor: '#f4f7f6', display: 'flex', flexDirection: 'column' }}>
-      <header style={{ width: '100%', padding: '60px 0', textAlign: 'center', backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0', marginBottom: '50px' }}>
-        <h1 style={{ color: '#1e293b', fontSize: '3rem', margin: '0 0 10px 0' }}>AI Invoice Processor</h1>
+    <div className="app-container">
+      <header className="main-header">
+        <h1>AI Invoice Intelligence</h1>
+        <p>Enterprise Document Consolidation System</p>
       </header>
-      
-      <div style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '0 20px' }}>
-        <div style={{ width: '100%', maxWidth: '700px' }}>
-          
-          <div style={{ backgroundColor: 'white', padding: '40px', borderRadius: '16px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)', textAlign: 'center' }}>
-            
-            <div 
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              style={{ 
-                border: isDragging ? '2px solid #4f46e5' : '2px dashed #cbd5e1', 
-                padding: '60px 20px', 
-                borderRadius: '12px', 
-                marginBottom: '25px',
-                backgroundColor: isDragging ? '#eef2ff' : '#f8fafc',
-                transition: 'all 0.2s ease',
-                cursor: 'pointer',
-                position: 'relative'
-              }}
-            >
-              <UploadCloud size={48} color={isDragging ? '#4f46e5' : '#94a3b8'} style={{ marginBottom: '15px' }} />
-              <h3 style={{ color: '#334155', margin: '0 0 10px 0' }}>
-                {isDragging ? "Drop them now!" : "Drag & Drop Invoices Here"}
-              </h3>
-              <p style={{ color: '#64748b', fontSize: '0.9rem' }}>or click to browse from your computer</p>
-              
-              <input 
-                type="file" 
-                multiple 
-                onChange={(e) => setFiles(Array.from(e.target.files))} 
-                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }} 
-              />
-            </div>
 
-            {files.length > 0 && (
-              <div style={{ textAlign: 'left', marginBottom: '20px', padding: '10px', backgroundColor: '#f1f5f9', borderRadius: '8px' }}>
-                <p style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>Selected Files ({files.length}):</p>
-                <ul style={{ fontSize: '0.8rem', color: '#64748b', paddingLeft: '20px', maxHeight: '100px', overflowY: 'auto' }}>
-                  {files.map((f, idx) => <li key={idx}>{f.name}</li>)}
-                </ul>
-              </div>
-            )}
-            
-            {showSuccess && (
-              <div style={{ color: '#155724', backgroundColor: '#d4edda', padding: '15px', borderRadius: '8px', marginBottom: '20px', fontWeight: 'bold' }}>
-                <CheckCircle size={20} style={{ verticalAlign: 'middle', marginRight: '10px' }} /> 
-                Batch Processing Complete!
-              </div>
-            )}
+      {/* KPI Dashboard Section */}
+      <section className="dashboard-grid">
+        <div className="kpi-card">
+          <h3>Total Processed</h3>
+          <p className="kpi-value">{data.filter(d => d.status === 'Processed').length}</p>
+        </div>
+        <div className="kpi-card error">
+          <h3>Unprocessed / Failed</h3>
+          <p className="kpi-value">{unprocessedCount}</p>
+        </div>
+        <div className="chart-container">
+          <h3>Volume Trend by Date</h3>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="date" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="count" fill="#10b981" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
 
-            <button 
-              onClick={handleUpload} 
-              disabled={loading || files.length === 0}
-              style={{ width: '100%', padding: '15px', backgroundColor: (loading || files.length === 0) ? '#cbd5e1' : '#4f46e5', color: 'white', border: 'none', borderRadius: '8px', cursor: (loading || files.length === 0) ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '20px' }}
-            >
-              {loading ? (
-                <span>
-                  <Loader2 style={{ animation: 'spin 1s linear infinite', marginRight: '10px', display: 'inline' }} /> 
-                  Processing {currentProgress} of {files.length}...
-                </span>
-              ) : (
-                <>Extract {files.length > 0 ? files.length : ''} Documents</>
-              )}
-            </button>
-
-            <button 
-              onClick={exportToExcel}
-              style={{ width: '100%', padding: '15px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '1.1rem' }}
-            >
-              <Download size={20} style={{ verticalAlign: 'middle', marginRight: '10px' }} />
-              Download Consolidated Report 
-            </button>
-          </div>
+      {/* Upload Zone */}
+      <div {...getRootProps()} className={`dropzone-box ${isDragActive ? 'active' : ''}`}>
+        <input {...getInputProps()} />
+        <div className="dropzone-content">
+          <span className="icon">📁</span>
+          <p>Drag & drop invoices or click to browse</p>
         </div>
       </div>
+
+      {statusMessage && <div className="status-banner">{statusMessage}</div>}
+
+      <div className="action-bar">
+        <button className="download-btn" onClick={exportToExcel} disabled={data.length === 0}>
+          Download Excel Report
+        </button>
+      </div>
+
+      {/* Data Preview Table */}
+      <section className="preview-table-section">
+        <h3>Data Preview</h3>
+        <div className="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Vendor</th>
+                <th>Date</th>
+                <th>Amount</th>
+                <th>Source File</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((row, i) => (
+                <tr key={i}>
+                  <td>{row.vendor_name || '---'}</td>
+                  <td>{row.invoice_date || '---'}</td>
+                  <td>{row.total_amount ? `$${row.total_amount}` : '---'}</td>
+                  <td>{row.source_file}</td>
+                  <td><span className={`badge ${row.status}`}>{row.status}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }
