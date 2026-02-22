@@ -1,5 +1,7 @@
 import os
-import easyocr
+import pytesseract
+from PIL import Image
+import io
 from fastapi import FastAPI, UploadFile, File
 from supabase import create_client, Client
 from groq import Groq
@@ -8,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
+# Enable CORS so your Vercel frontend can talk to this Render backend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -16,6 +19,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Secrets retrieved from Render Environment Variables
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
@@ -23,7 +27,6 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 # Initialize tools
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 groq_client = Groq(api_key=GROQ_API_KEY)
-reader = easyocr.Reader(['en'])
 
 @app.get("/")
 def home():
@@ -31,14 +34,14 @@ def home():
 
 @app.post("/upload")
 async def process_document(file: UploadFile = File(...)):
-    # 1. Read the file
+    # 1. Read the file into memory
     contents = await file.read()
+    image = Image.open(io.BytesIO(contents))
     
-    # 2. Extract text (OCR) [cite: 46, 171]
-    result = reader.readtext(contents, detail=0)
-    raw_text = " ".join(result)
+    # 2. Extract text (OCR) using the lighter Tesseract library
+    raw_text = pytesseract.image_to_string(image)
     
-    # 3. AI Structuring (LLM) [cite: 48, 172-177]
+    # 3. AI Structuring (LLM) via Groq
     prompt = f"Extract data from this text into JSON with keys: invoice_number, vendor_name, amount, invoice_date. Text: {raw_text}"
     
     chat_completion = groq_client.chat.completions.create(
@@ -49,12 +52,12 @@ async def process_document(file: UploadFile = File(...)):
     
     structured_data = json.loads(chat_completion.choices[0].message.content)
 
-    # 4. Save to Database [cite: 50, 186]
-    # We map 'amount' from AI to 'total_amount' in your DB [cite: 106]
+    # 4. Save to Supabase Database
     data_to_save = {
         "invoice_number": str(structured_data.get("invoice_number", "N/A")),
         "vendor_name": structured_data.get("vendor_name", "Unknown"),
         "total_amount": float(structured_data.get("amount", 0)),
+        "invoice_date": structured_data.get("invoice_date", "Unknown"),
         "source_file": file.filename
     }
     
@@ -64,10 +67,5 @@ async def process_document(file: UploadFile = File(...)):
 
 @app.get("/invoices")
 async def get_invoices():
-    try:
-        # Pulls all records from your Supabase table
-        response = supabase.table("invoices").select("*").execute()
-        return response.data
-    except Exception as e:
-        print(f"Error fetching from Supabase: {e}")
-        return []
+    response = supabase.table("invoices").select("*").execute()
+    return response.data
