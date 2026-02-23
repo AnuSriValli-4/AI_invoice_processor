@@ -2,6 +2,7 @@ import os
 import io
 import json
 import base64
+import zipfile
 from datetime import datetime
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
@@ -32,6 +33,8 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 groq_client = Groq(api_key=GROQ_API_KEY)
+
+SUPPORTED_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif", "tiff", "tif", "bmp", "pdf"}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -65,7 +68,7 @@ def parse_float(value):
 
 
 def image_to_base64(contents: bytes, filename: str):
-    """Convert image bytes to base64 string. Auto-converts TIFF/BMP to PNG."""
+    """Convert image bytes to base64. Auto-converts TIFF/BMP to PNG."""
     ext = filename.lower().split(".")[-1]
     media_type_map = {
         "jpg": "image/jpeg", "jpeg": "image/jpeg",
@@ -82,18 +85,17 @@ def image_to_base64(contents: bytes, filename: str):
 
 
 def pdf_first_page_to_base64(contents: bytes):
-    """Convert first page of PDF to a PNG base64 image using PyMuPDF."""
+    """Render first page of PDF to PNG base64 using PyMuPDF."""
     doc = fitz.open(stream=contents, filetype="pdf")
-    page = doc[0]  # Use first page — invoices are usually 1 page
-    # Render at 2x zoom for better clarity
-    mat = fitz.Matrix(2, 2)
+    page = doc[0]
+    mat = fitz.Matrix(2, 2)  # 2x zoom for clarity
     pix = page.get_pixmap(matrix=mat)
     img_bytes = pix.tobytes("png")
     return base64.b64encode(img_bytes).decode("utf-8"), "image/png"
 
 
 def call_vision_model(b64: str, media_type: str) -> dict:
-    """Send image to Groq vision model and get structured invoice data back."""
+    """Send image to Groq vision model and extract structured invoice data."""
     prompt = """You are an invoice data extraction assistant. Look at this invoice image carefully.
 
 Extract the following fields and return ONLY a valid JSON object — no explanation, no markdown, no code fences.
@@ -133,6 +135,51 @@ Rules:
     return json.loads(response.choices[0].message.content)
 
 
+def process_single_file(contents: bytes, filename: str) -> dict:
+    """Convert one file to base64 and extract invoice data. Returns saved record."""
+    ext = filename.lower().split(".")[-1]
+
+    # Convert to base64 image
+    if ext == "pdf":
+        if not PDF_SUPPORT:
+            raise ValueError("PDF support not available — add pymupdf to requirements.txt")
+        b64, media_type = pdf_first_page_to_base64(contents)
+    else:
+        b64, media_type = image_to_base64(contents, filename)
+
+    # Extract with vision model
+    structured = call_vision_model(b64, media_type)
+
+    # Sanitize
+    parsed_date = parse_date(structured.get("invoice_date"))
+    pre_tax     = parse_float(structured.get("pre_tax_amount"))
+    tax         = parse_float(structured.get("tax_amount"))
+    total       = parse_float(structured.get("total_amount"))
+
+    if total is None and pre_tax is not None and tax is not None:
+        total = round(pre_tax + tax, 2)
+    if pre_tax is None and total is not None and tax is not None:
+        pre_tax = round(total - tax, 2)
+
+    payment_status = structured.get("payment_status", "Unknown")
+    if payment_status not in ("Paid", "Unpaid", "Due", "Overdue", "Unknown"):
+        payment_status = "Unknown"
+
+    record = {
+        "invoice_number": str(structured.get("invoice_number") or "N/A"),
+        "vendor_name":    structured.get("vendor_name") or "Unknown",
+        "invoice_date":   parsed_date,
+        "amount":         pre_tax,
+        "tax_amount":     tax,
+        "total_amount":   total,
+        "payment_status": payment_status,
+        "source_file":    filename,
+    }
+
+    supabase.table("invoices").insert(record).execute()
+    return record
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.get("/")
@@ -158,56 +205,59 @@ async def process_document(file: UploadFile = File(...)):
     filename = file.filename or "upload"
     ext = filename.lower().split(".")[-1]
 
-    # Step 1: Convert file to base64 image for vision model
+    # ── ZIP: extract and process each file inside ──────────────────────────
+    if ext == "zip":
+        if not zipfile.is_zipfile(io.BytesIO(contents)):
+            raise HTTPException(status_code=400, detail="Invalid ZIP file.")
+
+        results = []
+        skipped = []
+
+        with zipfile.ZipFile(io.BytesIO(contents)) as zf:
+            for name in zf.namelist():
+                # Skip hidden/system files (e.g. __MACOSX)
+                if name.startswith("__") or name.startswith(".") or name.endswith("/"):
+                    continue
+
+                inner_ext = name.lower().split(".")[-1]
+                if inner_ext not in SUPPORTED_EXTENSIONS:
+                    skipped.append(name)
+                    continue
+
+                try:
+                    inner_contents = zf.read(name)
+                    # Use just the filename, not the full path inside zip
+                    inner_filename = name.split("/")[-1]
+                    record = process_single_file(inner_contents, inner_filename)
+                    results.append({**record, "status": "Processed"})
+                except Exception as e:
+                    results.append({
+                        "source_file": name,
+                        "status": "Failed",
+                        "vendor_name": f"Error: {str(e)}"
+                    })
+
+        return {
+            "status": "Success",
+            "processed": len([r for r in results if r["status"] == "Processed"]),
+            "failed": len([r for r in results if r["status"] == "Failed"]),
+            "skipped": skipped,
+            "results": results,
+        }
+
+    # ── Single file ────────────────────────────────────────────────────────
+    if ext not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '.{ext}'. Supported: {', '.join(sorted(SUPPORTED_EXTENSIONS))} and zip."
+        )
+
     try:
-        if ext == "pdf":
-            if not PDF_SUPPORT:
-                raise HTTPException(status_code=400, detail="PDF support not available. Add pymupdf to requirements.txt.")
-            b64, media_type = pdf_first_page_to_base64(contents)
-        else:
-            b64, media_type = image_to_base64(contents, filename)
-    except HTTPException:
-        raise
+        record = process_single_file(contents, filename)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=422, detail=f"File conversion failed: {str(e)}")
-
-    # Step 2: Extract data using Groq vision model
-    try:
-        structured = call_vision_model(b64, media_type)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI extraction failed: {str(e)}")
-
-    # Step 3: Sanitize values
-    parsed_date = parse_date(structured.get("invoice_date"))
-    pre_tax     = parse_float(structured.get("pre_tax_amount"))
-    tax         = parse_float(structured.get("tax_amount"))
-    total       = parse_float(structured.get("total_amount"))
-
-    if total is None and pre_tax is not None and tax is not None:
-        total = round(pre_tax + tax, 2)
-    if pre_tax is None and total is not None and tax is not None:
-        pre_tax = round(total - tax, 2)
-
-    payment_status = structured.get("payment_status", "Unknown")
-    if payment_status not in ("Paid", "Unpaid", "Due", "Overdue", "Unknown"):
-        payment_status = "Unknown"
-
-    # Step 4: Save to Supabase
-    record = {
-        "invoice_number": str(structured.get("invoice_number") or "N/A"),
-        "vendor_name":    structured.get("vendor_name") or "Unknown",
-        "invoice_date":   parsed_date,
-        "amount":         pre_tax,
-        "tax_amount":     tax,
-        "total_amount":   total,
-        "payment_status": payment_status,
-        "source_file":    filename,
-    }
-
-    try:
-        supabase.table("invoices").insert(record).execute()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database save failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
 
     return {"status": "Success", "data": {**record, "status": "Processed"}}
 
