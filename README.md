@@ -77,13 +77,14 @@ CREATE TABLE invoices (
 
 ## Challenges
 
-**Tesseract wouldn't install on Render.** Spent a while trying different approaches before switching to Groq's vision model entirely which actually works better since it understands invoice layout, not just raw text.
+Tesseract wouldn't install on Render. Spent a while trying different approaches before switching to Groq's vision model entirely which actually works better since it understands invoice layout, not just raw text.
 
-**Dates come in every format imaginable.** Built a parser that tries 10 different date formats in sequence and falls back to null safely if none match.
+Dates come in every format imaginable. Built a parser that tries 10 different date formats in sequence and falls back to null safely if none match.
 
-**Excel columns are named differently everywhere.** Instead of rigid field matching, the row is passed as natural text to the LLM which maps columns intelligently regardless of what they're called.
+Excel columns are named differently everywhere. Instead of rigid field matching, the row is passed as natural text to the LLM which maps columns intelligently regardless of what they're called.
 
-**Mac ZIPs include hidden system files.** Added filtering to skip `__MACOSX` folders and `.DS_Store` files automatically.
+Mac ZIPs include hidden system files. Added filtering to skip `__MACOSX` folders and `.DS_Store` files automatically.
+
 
 
 ## Limitations
