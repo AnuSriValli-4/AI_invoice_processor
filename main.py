@@ -2,12 +2,21 @@ import os
 import pytesseract
 from PIL import Image
 import io
-from fastapi import FastAPI, UploadFile, File
+import json
+from datetime import datetime
+
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client, Client
 from groq import Groq
-import json
-from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime
+
+# PDF support
+try:
+    import fitz  # PyMuPDF
+    PDF_SUPPORT = True
+except ImportError:
+    PDF_SUPPORT = False
+    print("WARNING: PyMuPDF not installed. PDF support disabled. Run: pip install pymupdf")
 
 app = FastAPI()
 
@@ -26,83 +35,154 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 groq_client = Groq(api_key=GROQ_API_KEY)
 
-def parse_date(date_str):
-    """Try multiple date formats and return ISO format or None."""
-    if not date_str or date_str in ("Unknown", "N/A", ""):
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+def parse_date(date_str: str):
+    """Try many date formats. Returns ISO string or None (never crashes Supabase DATE col)."""
+    if not date_str or str(date_str).strip() in ("", "Unknown", "N/A", "null", "None"):
         return None
-    formats = ["%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%B %d, %Y", "%b %d, %Y", "%d-%m-%Y", "%m-%d-%Y"]
+    s = str(date_str).strip()
+    formats = [
+        "%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y",
+        "%B %d, %Y", "%b %d, %Y",
+        "%d-%m-%Y", "%m-%d-%Y",
+        "%d %B %Y", "%d %b %Y",
+        "%Y/%m/%d",
+    ]
     for fmt in formats:
         try:
-            return datetime.strptime(str(date_str).strip(), fmt).strftime("%Y-%m-%d")
+            return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
         except ValueError:
             continue
-    return None  # Return None if no format matches — avoids Supabase DATE rejection
+    return None
+
 
 def parse_float(value):
-    """Safely parse a float, stripping currency symbols."""
-    if value is None or value == "" or value == "N/A":
+    """Safely parse a float, stripping currency symbols and commas."""
+    if value is None or str(value).strip() in ("", "N/A", "null", "None"):
         return None
     try:
-        return float(str(value).replace("$", "").replace(",", "").strip())
+        return float(str(value).replace("$", "").replace(",", "").replace(" ", "").strip())
     except (ValueError, TypeError):
         return None
 
+
+def extract_text_from_image(contents: bytes) -> str:
+    image = Image.open(io.BytesIO(contents))
+    return pytesseract.image_to_string(image)
+
+
+def extract_text_from_pdf(contents: bytes) -> str:
+    if not PDF_SUPPORT:
+        raise HTTPException(status_code=400, detail="PDF support not available. Install PyMuPDF.")
+    doc = fitz.open(stream=contents, filetype="pdf")
+    text = ""
+    for page in doc:
+        text += page.get_text()
+    return text
+
+
+def call_llm(raw_text: str) -> dict:
+    prompt = f"""You are an invoice data extraction assistant.
+
+Extract the following fields from the invoice text below. Return ONLY a valid JSON object — no explanation, no markdown, no code fences.
+
+Required JSON keys:
+- invoice_number   (string, or "N/A" if not found)
+- vendor_name      (string, company or person who issued the invoice)
+- invoice_date     (string in YYYY-MM-DD format if possible, or the raw date string you find)
+- pre_tax_amount   (number — the subtotal BEFORE tax. Do NOT include tax in this value.)
+- tax_amount       (number — the tax amount only)
+- total_amount     (number — the FINAL total including tax)
+- payment_status   (string — one of: Paid, Unpaid, Due, Overdue. Infer from context if not explicit.)
+
+Rules:
+- All number fields must be plain numbers (e.g. 1234.56), NOT strings.
+- If a field truly cannot be found, use null for numbers and "Unknown" for strings.
+- Do not invent values — only extract what is present in the text.
+
+Invoice Text:
+\"\"\"
+{raw_text}
+\"\"\"
+"""
+    response = groq_client.chat.completions.create(
+        messages=[{"role": "user", "content": prompt}],
+        model="llama-3.3-70b-versatile",
+        response_format={"type": "json_object"},
+        temperature=0.1,
+    )
+    return json.loads(response.choices[0].message.content)
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
 @app.get("/")
 def home():
-    return {"message": "Server is running!"}
+    return {"message": "Server is running!", "pdf_support": PDF_SUPPORT}
+
 
 @app.post("/upload")
 async def process_document(file: UploadFile = File(...)):
     contents = await file.read()
-    image = Image.open(io.BytesIO(contents))
-    raw_text = pytesseract.image_to_string(image)
+    filename = file.filename or ""
 
-    # Expanded prompt asking for all fields your DB supports
-    prompt = f"""Extract invoice data from the text below and return a JSON object with exactly these keys:
-- invoice_number (string)
-- vendor_name (string)
-- invoice_date (string, in YYYY-MM-DD format if possible)
-- pre_tax_amount (number, subtotal before tax)
-- tax_amount (number, tax amount only)
-- total_amount (number, final total including tax)
-- payment_status (string, e.g. Paid, Unpaid, Due, Overdue — infer if not explicit)
+    # Step 1: Extract text
+    try:
+        if filename.lower().endswith(".pdf"):
+            raw_text = extract_text_from_pdf(contents)
+        else:
+            raw_text = extract_text_from_image(contents)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Text extraction failed: {str(e)}")
 
-Return only the JSON object, no explanation.
+    if not raw_text or raw_text.strip() == "":
+        raise HTTPException(status_code=422, detail="No text could be extracted from this file.")
 
-Invoice Text:
-{raw_text}"""
+    # Step 2: LLM extraction
+    try:
+        structured = call_llm(raw_text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"LLM extraction failed: {str(e)}")
 
-    chat_completion = groq_client.chat.completions.create(
-        messages=[{"role": "user", "content": prompt}],
-        model="llama-3.3-70b-versatile",
-        response_format={"type": "json_object"}
-    )
+    # Step 3: Sanitize values
+    parsed_date  = parse_date(structured.get("invoice_date"))
+    pre_tax      = parse_float(structured.get("pre_tax_amount"))
+    tax          = parse_float(structured.get("tax_amount"))
+    total        = parse_float(structured.get("total_amount"))
 
-    structured_data = json.loads(chat_completion.choices[0].message.content)
-
-    parsed_date = parse_date(structured_data.get("invoice_date"))
-    pre_tax = parse_float(structured_data.get("pre_tax_amount"))
-    tax = parse_float(structured_data.get("tax_amount"))
-    total = parse_float(structured_data.get("total_amount"))
-
-    # If total is missing but we have components, calculate it
+    # Derive total if missing
     if total is None and pre_tax is not None and tax is not None:
         total = round(pre_tax + tax, 2)
 
-    data_to_save = {
-        "invoice_number": str(structured_data.get("invoice_number", "N/A")),
-        "vendor_name": structured_data.get("vendor_name", "Unknown"),
-        "invoice_date": parsed_date,          # None-safe, won't break DATE column
-        "amount": pre_tax,                    # pre-tax subtotal -> amount column
-        "tax_amount": tax,
-        "total_amount": total,
-        "payment_status": structured_data.get("payment_status", "Unknown"),
-        "source_file": file.filename
+    # Derive pre_tax if missing
+    if pre_tax is None and total is not None and tax is not None:
+        pre_tax = round(total - tax, 2)
+
+    payment_status = structured.get("payment_status", "Unknown")
+    if payment_status not in ("Paid", "Unpaid", "Due", "Overdue", "Unknown"):
+        payment_status = "Unknown"
+
+    # Step 4: Save to Supabase
+    record = {
+        "invoice_number": str(structured.get("invoice_number") or "N/A"),
+        "vendor_name":    structured.get("vendor_name") or "Unknown",
+        "invoice_date":   parsed_date,     # None-safe for DATE column
+        "amount":         pre_tax,         # pre-tax subtotal
+        "tax_amount":     tax,
+        "total_amount":   total,
+        "payment_status": payment_status,
+        "source_file":    filename,
     }
 
-    supabase.table("invoices").insert(data_to_save).execute()
+    try:
+        supabase.table("invoices").insert(record).execute()
+    except Exception as e:
+        raise HTTPException(status_code(500), detail=f"Database save failed: {str(e)}")
 
-    return {"status": "Success", "data": {**data_to_save, "status": "Processed"}}
+    return {"status": "Success", "data": {**record, "status": "Processed"}}
+
 
 @app.get("/invoices")
 async def get_invoices():
