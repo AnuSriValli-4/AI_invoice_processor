@@ -22,6 +22,7 @@ export default function App() {
   const [statusMessage, setStatusMessage] = useState('');
   const [statusType, setStatusType] = useState('info');
   const [processingFile, setProcessingFile] = useState('');
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -70,6 +71,9 @@ export default function App() {
       'application/pdf': ['.pdf'],
       'application/zip': ['.zip'],
       'application/x-zip-compressed': ['.zip'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'application/vnd.ms-excel': ['.xls'],
+      'text/csv': ['.csv'],
     },
   });
 
@@ -84,17 +88,23 @@ export default function App() {
       const formData = new FormData();
       formData.append('file', file);
       try {
+        setUploadProgress(0);
         const res = await axios.post(`${BACKEND_URL}/upload`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
           timeout: 90000,
+          onUploadProgress: (progressEvent) => {
+            const pct = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
+            setUploadProgress(pct);
+          },
         });
-        // ZIP returns multiple results; single files return one result
+        // ZIP/Excel/CSV return multiple results; single image/pdf returns one
         if (res.data.results) {
           res.data.results.forEach(r => results.push(r));
         } else {
           const result = res.data.data || res.data;
           results.push({ ...result, status: 'Processed', source_file: file.name });
         }
+        setUploadProgress(100);
       } catch (err) {
         // Extract the most useful error message possible
         let errorMsg = 'Unknown error';
@@ -122,6 +132,7 @@ export default function App() {
     setData(prev => [...results, ...prev]);
     setFiles([]);
     setProcessingFile('');
+    setUploadProgress(0);
     setLoading(false);
     const ok = results.filter(r => r.status === 'Processed').length;
     const failed = results.filter(r => r.status === 'Failed');
@@ -176,7 +187,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* KPI Row */}
       <div className="kpi-row">
         <div className="kpi-card">
           <div className="kpi-icon success-icon"><CheckCircle2 size={16} /></div>
@@ -201,7 +211,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* Chart */}
       <div className="chart-section">
         <p className="chart-title">Invoices by Date</p>
         {chartData.length === 0 ? (
@@ -225,7 +234,6 @@ export default function App() {
         )}
       </div>
 
-      {/* Upload Zone */}
       <div
         {...getRootProps()}
         className={`dropzone-box ${isDragActive ? 'dropzone-active' : ''} ${files.length > 0 ? 'dropzone-ready' : ''}`}
@@ -239,10 +247,21 @@ export default function App() {
             ? `${files.length} file(s) staged — ${files.map(f => f.name).join(', ')}`
             : 'Drag & drop invoices here, or click to select'}
         </p>
-        <p className="dropzone-hint">Supports PNG, JPG, TIFF, WEBP, BMP, PDF, ZIP</p>
+        <p className="dropzone-hint">Supports PNG, JPG, TIFF, WEBP, BMP, PDF, Excel, CSV, ZIP</p>
       </div>
 
-      {/* Actions */}
+      {loading && (
+        <div className="progress-wrapper">
+          <div className="progress-info">
+            <span>{processingFile ? `Processing: ${processingFile}` : 'Uploading...'}</span>
+            <span>{uploadProgress}%</span>
+          </div>
+          <div className="progress-track">
+            <div className="progress-fill" style={{width: `${uploadProgress}%`}} />
+          </div>
+        </div>
+      )}
+
       <div className="action-bar">
         <button className="process-btn" onClick={handleUpload} disabled={loading || files.length === 0}>
           {loading ? (
@@ -257,9 +276,9 @@ export default function App() {
         <button className="download-btn" onClick={exportToExcel} disabled={data.length === 0}>
           <Download size={15} /> Export Excel
         </button>
+
       </div>
 
-      {/* Status Banner */}
       {statusMessage && (
         <div className={`status-banner status-${statusType}`}>
           {statusType === 'success' && <CheckCircle2 size={13} />}
@@ -268,7 +287,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Table */}
       <div className="table-wrapper">
         <table>
           <thead>
