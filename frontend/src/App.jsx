@@ -45,7 +45,6 @@ function App() {
         
         const result = await response.json();
 
-        // Mapped specifically to your Supabase schema: vendor_name, invoice_date, total_amount
         if (result.status === "Success" && result.data) {
           setData(prev => [{
             vendor_name: result.data.vendor_name || 'Unknown',
