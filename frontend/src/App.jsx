@@ -1,18 +1,32 @@
-import React, { useState, useMemo } from 'react';
-import { useDropzone } from 'react-dropzone';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
+import { Upload, Download, CheckCircle, Loader2 } from 'lucide-react';
 import './App.css';
 
+// CHANGE THIS TO YOUR RENDER URL WHEN PUSHING TO GITHUB
 const BACKEND_URL = "https://ai-invoice-processor-backend.onrender.com";
 
 function App() {
+  const [file, setFile] = useState(null);
   const [data, setData] = useState([]);
-  const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [statusMessage, setStatusMessage] = useState("");
+  const [showSuccess, setShowSuccess] = useState(false);
 
-  const chartData = useMemo(() => {
+  useEffect(() => {
+    const loadInvoices = async () => {
+      try {
+        const response = await axios.get(`${BACKEND_URL}/invoices`);
+        setData(response.data); 
+      } catch (error) {
+        console.error("History load failed:", error);
+      }
+    };
+    loadInvoices();
+  }, []);
+
+  const chartData = React.useMemo(() => {
     const counts = data.reduce((acc, curr) => {
       const date = curr.invoice_date || 'Unknown';
       acc[date] = (acc[date] || 0) + 1;
@@ -21,48 +35,24 @@ function App() {
     return Object.keys(counts).map(date => ({ date, count: counts[date] }));
   }, [data]);
 
-  const onDrop = (acceptedFiles) => {
-    setFiles(acceptedFiles);
-    setStatusMessage(`${acceptedFiles.length} files staged. Click 'Process Documents' to begin.`);
-  };
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
-
   const handleUpload = async () => {
-    if (files.length === 0) return;
+    if (!file) return alert("Select a file!");
     setLoading(true);
-    setStatusMessage("Extracting intelligence from documents...");
-    
-    for (const file of files) {
-      const formData = new FormData();
-      formData.append('file', file);
+    const formData = new FormData();
+    formData.append('file', file);
 
-      try {
-        const response = await fetch(`${BACKEND_URL}/upload`, {
-          method: 'POST',
-          body: formData,
-        });
-        
-        const result = await response.json();
-
-        if (result.status === "Success" && result.data) {
-          setData(prev => [{
-            vendor_name: result.data.vendor_name || 'Unknown',
-            invoice_date: result.data.invoice_date || 'N/A',
-            total_amount: result.data.total_amount || 0,
-            source_file: file.name,
-            status: 'Processed'
-          }, ...prev]);
-        } else {
-          setData(prev => [{ source_file: file.name, status: 'Failed', vendor_name: 'Auth Error' }, ...prev]);
-        }
-      } catch (error) {
-        setData(prev => [{ source_file: file.name, status: 'Failed', vendor_name: 'Connection Error' }, ...prev]);
-      }
+    try {
+      const response = await axios.post(`${BACKEND_URL}/upload`, formData);
+      // Merging your successful logic: response.data.data
+      const newEntry = response.data.data || response.data;
+      setData(prev => [{...newEntry, status: 'Processed'}, ...prev]);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 4000);
+    } catch (error) {
+      alert("Extraction failed. Ensure backend is awake!");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-    setStatusMessage("All files processed and saved to Supabase.");
-    setFiles([]);
   };
 
   const exportToExcel = () => {
@@ -82,11 +72,11 @@ function App() {
       <section className="dashboard-grid">
         <div className="kpi-card">
           <span className="kpi-label">Total Processed</span>
-          <span className="kpi-value">{data.filter(d => d.status === 'Processed').length}</span>
+          <span className="kpi-value">{data.length}</span>
         </div>
-        <div className="kpi-card error">
-          <span className="kpi-label">Processing Issues</span>
-          <span className="kpi-value">{data.filter(d => d.status === 'Failed').length}</span>
+        <div className="kpi-card">
+          <span className="kpi-label">System Status</span>
+          <span className="kpi-value" style={{fontSize: '1.2rem', color: '#10b981'}}>Active</span>
         </div>
         <div className="chart-container">
           <ResponsiveContainer width="100%" height="100%">
@@ -101,49 +91,43 @@ function App() {
         </div>
       </section>
 
-      <div {...getRootProps()} className={`dropzone-box ${isDragActive ? 'active' : ''}`}>
-        <input {...getInputProps()} />
-        <p className="dropzone-text">
-          {files.length > 0 ? `${files.length} files selected` : "Drag & drop invoices or click to browse"}
-        </p>
+      <div className="upload-section">
+        <input type="file" onChange={(e) => setFile(e.target.files[0])} />
+        <button className="process-btn" onClick={handleUpload} disabled={loading}>
+          {loading ? "AI Extracting..." : "Process Document"}
+        </button>
       </div>
+
+      {showSuccess && <div className="success-banner">Successfully saved to Supabase!</div>}
 
       <div className="action-bar">
-        <button className="process-btn" onClick={handleUpload} disabled={loading || files.length === 0}>
-          {loading ? "Processing..." : "Process Documents"}
-        </button>
         <button className="download-btn" onClick={exportToExcel} disabled={data.length === 0}>
-          Download Excel Report
+          <Download size={16} /> Download Excel
         </button>
       </div>
 
-      <section className="table-section">
-        <div className="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>Vendor Name</th>
-                <th>Invoice Date</th>
-                <th>Total Amount</th>
-                <th>Source File</th>
-                <th>Status</th>
+      <div className="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Vendor</th>
+              <th>Date</th>
+              <th>Amount</th>
+              <th>File</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((inv, i) => (
+              <tr key={i}>
+                <td>{inv.vendor_name || inv.vendor || "N/A"}</td>
+                <td>{inv.invoice_date || "---"}</td>
+                <td>{inv.total_amount || inv.amount ? `$${inv.total_amount || inv.amount}` : "$0.00"}</td>
+                <td style={{fontSize: '0.7rem'}}>{inv.source_file || "Uploaded"}</td>
               </tr>
-            </thead>
-            <tbody>
-              {data.map((row, i) => (
-                <tr key={i}>
-                  <td className="vendor-cell">{row.vendor_name}</td>
-                  <td>{row.invoice_date}</td>
-                  <td className="amount-cell">{row.total_amount ? `$${row.total_amount}` : '---'}</td>
-                  <td className="file-cell">{row.source_file}</td>
-                  <td><span className={`badge ${row.status}`}>{row.status}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-      {statusMessage && <div className="status-footer">{statusMessage}</div>}
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
