@@ -44,6 +44,7 @@ SUPPORTED_EXTENSIONS = {
 }
 
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def parse_date(date_str: str):
     """Try many date formats. Returns ISO YYYY-MM-DD string or None."""
@@ -208,7 +209,7 @@ def process_single_file(contents: bytes, filename: str) -> list:
     """
     ext = filename.lower().split(".")[-1]
 
-    # Excel (.xlsx / .xls) — each row = one invoice
+    # ── Excel (.xlsx / .xls) — each row = one invoice ──────────────────────
     if ext in ("xlsx", "xls"):
         wb = openpyxl.load_workbook(io.BytesIO(contents), data_only=True)
         ws = wb.active
@@ -229,7 +230,7 @@ def process_single_file(contents: bytes, filename: str) -> list:
             records.append({**record, "status": "Processed"})
         return records
 
-    # CSV — each row = one invoice 
+    # ── CSV — each row = one invoice ────────────────────────────────────────
     if ext == "csv":
         text = contents.decode("utf-8", errors="replace")
         reader = csv.DictReader(io.StringIO(text))
@@ -245,7 +246,7 @@ def process_single_file(contents: bytes, filename: str) -> list:
             records.append({**record, "status": "Processed"})
         return records
 
-    # PDF — render first page as image 
+    # ── PDF — render first page as image ────────────────────────────────────
     if ext == "pdf":
         if not PDF_SUPPORT:
             raise ValueError("PDF support not available — add 'pymupdf' to requirements.txt and redeploy.")
@@ -254,13 +255,14 @@ def process_single_file(contents: bytes, filename: str) -> list:
         record = sanitize_and_save(structured, filename)
         return [{**record, "status": "Processed"}]
 
-    # Image (PNG, JPG, WEBP, TIFF, BMP, GIF) 
+    # ── Image (PNG, JPG, WEBP, TIFF, BMP, GIF) ─────────────────────────────
     b64, media_type = image_to_base64(contents, filename)
     structured = call_vision_model(b64, media_type)
     record = sanitize_and_save(structured, filename)
     return [{**record, "status": "Processed"}]
 
 
+# ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.get("/")
 def home():
@@ -295,7 +297,7 @@ async def process_document(file: UploadFile = File(...)):
     filename = file.filename or "upload"
     ext = filename.lower().split(".")[-1]
 
-    #  ZIP: unpack and process every valid file inside 
+    # ── ZIP: unpack and process every valid file inside ─────────────────────
     if ext == "zip":
         if not zipfile.is_zipfile(io.BytesIO(contents)):
             raise HTTPException(status_code=400, detail="Invalid or corrupted ZIP file.")
@@ -332,14 +334,15 @@ async def process_document(file: UploadFile = File(...)):
             "results": all_results,
         }
 
-
+    # ── Single unsupported file type ────────────────────────────────────────
     if ext not in SUPPORTED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
             detail=f"Unsupported file type '.{ext}'. Supported: {', '.join(sorted(SUPPORTED_EXTENSIONS))}, zip."
         )
 
-   
+    # ── Single supported file ───────────────────────────────────────────────
+    try:
         records = process_single_file(contents, filename)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
