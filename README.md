@@ -2,7 +2,6 @@
 A web app that lets you upload invoices in any format like image, PDF, Excel, CSV, or ZIP. It automatically extracts the data using AI without manual entry.
 Everything gets saved to a database and shown in a live dashboard.
 
----
 
 ## What It Does
 - Upload one invoice or multiple invoices of different file types
@@ -11,7 +10,6 @@ Everything gets saved to a database and shown in a live dashboard.
 - Export everything to Excel with one click
 - Dashboard shows total invoices processed, failed count, total value, and a trend chart
 
----
 
 ## Architecture
 
@@ -30,7 +28,6 @@ FastAPI Backend (Render)
 Supabase (PostgreSQL)
 ```
 
----
 
 ## Prompt Strategy
 
@@ -38,7 +35,6 @@ For images and PDFs, the image is sent directly to Groq's vision model with a pr
 
 For Excel and CSV, each row is converted to `column: value` text and sent to the text model. This works even when column names are inconsistent like "Supplier" vs "Vendor", "Grand Total" vs "Amount", the model figures out the mapping on its own.
 
----
 
 ## Supported File Types
 
@@ -50,7 +46,6 @@ For Excel and CSV, each row is converted to `column: value` text and sent to the
 | CSV | Each row = one invoice |
 | ZIP | Each file inside processed individually |
 
----
 
 ## Tech Stack
 
@@ -61,7 +56,6 @@ For Excel and CSV, each row is converted to `column: value` text and sent to the
 | AI | Groq API (llama-4-scout + llama-3.3-70b) |
 | Database | Supabase (PostgreSQL) |
 
----
 
 ## Database Schema
 
@@ -80,7 +74,6 @@ CREATE TABLE invoices (
 );
 ```
 
----
 
 ## Challenges
 
