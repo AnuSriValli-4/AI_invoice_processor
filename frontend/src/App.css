@@ -1,42 +1,95 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
+:root {
+  --primary: #0f172a;
+  --accent: #10b981;
+  --error: #ef4444;
+  --bg: #f8fafc;
+}
+
+body { 
+  background-color: var(--bg); 
+  font-family: 'Inter', sans-serif; 
+  margin: 0;
+  color: #334155;
+}
+
+.app-container { 
+  max-width: 1200px; 
+  margin: 0 auto; 
+  padding: 40px 20px; 
+}
+
+.main-header { text-align: center; margin-bottom: 40px; color: var(--primary); }
+
+/* Dashboard Grid - Styles the KPI cards and Chart area */
+.dashboard-grid { 
+  display: grid; 
+  grid-template-columns: 1fr 1fr 2fr; 
+  gap: 20px; 
+  margin-bottom: 40px; 
+}
+
+.kpi-card { 
+  background: white; 
+  padding: 24px; 
+  border-radius: 12px; 
+  box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
   text-align: center;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+.kpi-value { 
+  font-size: 2.8rem; 
+  font-weight: 800; 
+  color: var(--accent); 
+  margin: 10px 0 0 0; 
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.kpi-card.error .kpi-value { color: var(--error); }
+
+.chart-container {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+/* Upload Zone - Styles the Drag & Drop area */
+.dropzone-box { 
+  border: 2.5px dashed #cbd5e1; 
+  border-radius: 16px; 
+  padding: 60px 40px; 
+  text-align: center; 
+  background: white; 
+  cursor: pointer; 
+  transition: all 0.3s ease; 
 }
 
-.card {
-  padding: 2em;
+.dropzone-box:hover, .dropzone-box.active { 
+  border-color: var(--accent); 
+  background: #f0fdf4; 
 }
 
-.read-the-docs {
-  color: #888;
+/* Table Styling - For the Data Preview */
+.table-wrapper { 
+  background: white; 
+  border-radius: 12px; 
+  overflow-x: auto; 
+  box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
+  margin-top: 24px; 
 }
+
+table { width: 100%; border-collapse: collapse; text-align: left; }
+th { background: #f1f5f9; padding: 18px; color: #64748b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+td { padding: 18px; border-top: 1px solid #f1f5f9; font-size: 0.95rem; }
+
+.status-banner {
+  background: #dcfce7;
+  color: #166534;
+  padding: 12px;
+  border-radius: 8px;
+  text-align: center;
+  margin: 20px 0;
+  font-weight: 600;
+}
+
+.badge.Processed { color: #059669; background: #d1fae5; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; }
+.badge.Failed { color: #dc2626; background: #fee2e2; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; }
