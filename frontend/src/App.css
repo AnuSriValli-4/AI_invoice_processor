@@ -1,82 +1,73 @@
 :root {
   --primary: #0f172a;
   --accent: #10b981;
-  --error: #ef4444;
   --bg: #f8fafc;
 }
 
-body { margin: 0; background: var(--bg); font-family: 'Inter', sans-serif; overflow: hidden; }
 
-/* Fits the entire app to one screen height */
+body, html { 
+  margin: 0; 
+  padding: 0; 
+  height: 100vh; 
+  overflow: hidden; 
+  background: var(--bg);
+  font-family: 'Inter', sans-serif;
+}
+
 .app-container {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  padding: 15px 30px;
+  padding: 10px 40px;
   box-sizing: border-box;
 }
 
-.main-header { text-align: center; margin-bottom: 15px; }
-.main-header h1 { margin: 0; font-size: 1.6rem; color: var(--primary); }
-.main-header p { margin: 0; font-size: 0.9rem; color: #64748b; }
+/* Compact Header */
+.main-header { margin-bottom: 5px; text-align: center; }
+.main-header h1 { margin: 0; font-size: 1.5rem; }
 
-/* Dashboard: KPI cards and Chart side-by-side */
+/* Dashboard: Fits top 25% of screen */
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 2fr;
+  grid-template-columns: 1fr 1fr 2.5fr;
   gap: 15px;
-  height: 180px;
-  margin-bottom: 15px;
+  height: 160px;
+  margin-bottom: 10px;
 }
 
 .kpi-card, .chart-container {
   background: white;
-  border-radius: 10px;
-  padding: 15px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  border-radius: 8px;
+  padding: 10px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
 }
 
-.kpi-value { font-size: 2.2rem; font-weight: 800; color: var(--accent); margin: 5px 0 0 0; }
-.kpi-card.error .kpi-value { color: var(--error); }
-.kpi-card h3 { margin: 0; font-size: 0.9rem; color: #64748b; }
+.kpi-value { font-size: 2rem; font-weight: bold; color: var(--accent); margin: 0; }
+.kpi-card.error .kpi-value { color: #ef4444; }
 
-/* Drag & Drop Area */
+
 .dropzone-box {
   border: 2px dashed #cbd5e1;
   padding: 15px;
   text-align: center;
   background: white;
-  border-radius: 10px;
-  cursor: pointer;
+  border-radius: 8px;
+  margin-bottom: 10px;
 }
 
-.status-banner { text-align: center; color: var(--accent); font-weight: bold; margin: 10px 0; font-size: 0.9rem; }
 
-/* Action Buttons */
-.action-bar { display: flex; justify-content: center; gap: 15px; margin-bottom: 15px; }
+.action-bar { display: flex; gap: 15px; justify-content: center; margin-bottom: 10px; }
+.process-btn { background: var(--accent); color: white; border: none; padding: 10px 25px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+.download-btn { background: var(--primary); color: white; border: none; padding: 10px 25px; border-radius: 5px; cursor: pointer; }
 
-.process-btn { background: var(--accent); color: white; border: none; padding: 10px 30px; border-radius: 6px; font-weight: bold; cursor: pointer; }
-.download-btn { background: var(--primary); color: white; border: none; padding: 10px 30px; border-radius: 6px; cursor: pointer; }
 
-/* Table Section: Fills remaining space with scroll */
-.table-section { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; }
+.table-section { flex-grow: 1; overflow: hidden; display: flex; flex-direction: column; }
+.table-wrapper { flex-grow: 1; overflow-y: auto; background: white; border-radius: 8px; border: 1px solid #e2e8f0; }
 
-.table-wrapper {
-  flex-grow: 1;
-  overflow-y: auto;
-  background: white;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-}
-
-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem; }
-th { position: sticky; top: 0; background: #f1f5f9; padding: 12px; z-index: 10; color: #64748b; text-transform: uppercase; font-size: 0.75rem; }
-td { padding: 12px; border-top: 1px solid #f1f5f9; }
-
-.badge { padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
-.badge.Processed { background: #d1fae5; color: #065f46; }
-.badge.Failed { background: #fee2e2; color: #991b1b; }
+table { width: 100%; border-collapse: collapse; }
+th { position: sticky; top: 0; background: #f1f5f9; padding: 10px; text-align: left; font-size: 0.75rem; color: #64748b; text-transform: uppercase; }
+td { padding: 10px; border-top: 1px solid #f1f5f9; font-size: 0.85rem; }
