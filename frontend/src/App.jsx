@@ -68,6 +68,8 @@ export default function App() {
     accept: {
       'image/*': ['.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.webp'],
       'application/pdf': ['.pdf'],
+      'application/zip': ['.zip'],
+      'application/x-zip-compressed': ['.zip'],
     },
   });
 
@@ -84,13 +86,36 @@ export default function App() {
       try {
         const res = await axios.post(`${BACKEND_URL}/upload`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: 60000,
+          timeout: 90000,
         });
-        const result = res.data.data || res.data;
-        results.push({ ...result, status: 'Processed', source_file: file.name });
+        // ZIP returns multiple results; single files return one result
+        if (res.data.results) {
+          res.data.results.forEach(r => results.push(r));
+        } else {
+          const result = res.data.data || res.data;
+          results.push({ ...result, status: 'Processed', source_file: file.name });
+        }
       } catch (err) {
-        console.error(`Error processing ${file.name}:`, err?.response?.data || err.message);
-        results.push({ source_file: file.name, status: 'Failed', vendor_name: 'Error — see console' });
+        // Extract the most useful error message possible
+        let errorMsg = 'Unknown error';
+        if (err.code === 'ECONNABORTED') {
+          errorMsg = 'Timeout — server took too long (Render may be waking up, try again)';
+        } else if (err.code === 'ERR_NETWORK' || !err.response) {
+          errorMsg = 'Network error — backend may be offline or still starting up';
+        } else if (err.response?.data?.detail) {
+          errorMsg = err.response.data.detail;
+        } else if (err.response?.data?.message) {
+          errorMsg = err.response.data.message;
+        } else if (err.response?.status) {
+          errorMsg = `Server error ${err.response.status}`;
+        }
+        console.error(`❌ ${file.name}:`, errorMsg, err?.response?.data || err);
+        results.push({
+          source_file: file.name,
+          status: 'Failed',
+          vendor_name: `Error: ${errorMsg}`,
+          _errorDetail: errorMsg,
+        });
       }
     }
 
@@ -99,9 +124,14 @@ export default function App() {
     setProcessingFile('');
     setLoading(false);
     const ok = results.filter(r => r.status === 'Processed').length;
-    const fail = results.filter(r => r.status === 'Failed').length;
-    if (fail === 0) setStatus(`✓ All ${ok} invoice(s) processed successfully!`, 'success');
-    else setStatus(`Processed ${ok} • Failed ${fail} — open console for error details.`, 'error');
+    const failed = results.filter(r => r.status === 'Failed');
+    if (failed.length === 0) {
+      setStatus(`✓ All ${ok} invoice(s) processed successfully!`, 'success');
+    } else {
+      // Show the actual error from the first failure
+      const firstError = failed[0]._errorDetail || 'Unknown error';
+      setStatus(`${ok} processed • ${failed.length} failed: "${firstError}"`, 'error');
+    }
   };
 
   const exportToExcel = () => {
@@ -209,7 +239,7 @@ export default function App() {
             ? `${files.length} file(s) staged — ${files.map(f => f.name).join(', ')}`
             : 'Drag & drop invoices here, or click to select'}
         </p>
-        <p className="dropzone-hint">Supports PNG, JPG, TIFF, WEBP, PDF</p>
+        <p className="dropzone-hint">Supports PNG, JPG, TIFF, WEBP, BMP, PDF, ZIP</p>
       </div>
 
       {/* Actions */}
