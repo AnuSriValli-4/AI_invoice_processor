@@ -23,13 +23,15 @@ function App() {
 
   const onDrop = (acceptedFiles) => {
     setFiles(acceptedFiles);
-    setStatusMessage(`${acceptedFiles.length} files ready for processing.`);
+    setStatusMessage(`${acceptedFiles.length} files staged. Click 'Process Documents' to begin.`);
   };
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
 
   const handleUpload = async () => {
     if (files.length === 0) return;
     setLoading(true);
-    setStatusMessage(`Processing ${files.length} files...`);
+    setStatusMessage("Extracting intelligence from documents...");
     
     for (const file of files) {
       const formData = new FormData();
@@ -40,24 +42,29 @@ function App() {
           method: 'POST',
           body: formData,
         });
+        
         const result = await response.json();
 
-        // FIX: Mapping result.data to the table state for correct tracking
-        if (result.status === "Success") {
-          setData(prev => [{ ...result.data, status: 'Processed' }, ...prev]);
+        // Mapped specifically to your Supabase schema: vendor_name, invoice_date, total_amount
+        if (result.status === "Success" && result.data) {
+          setData(prev => [{
+            vendor_name: result.data.vendor_name || 'Unknown',
+            invoice_date: result.data.invoice_date || 'N/A',
+            total_amount: result.data.total_amount || 0,
+            source_file: file.name,
+            status: 'Processed'
+          }, ...prev]);
         } else {
-          setData(prev => [{ source_file: file.name, status: 'Failed', vendor_name: 'Error' }, ...prev]);
+          setData(prev => [{ source_file: file.name, status: 'Failed', vendor_name: 'Auth Error' }, ...prev]);
         }
       } catch (error) {
-        setData(prev => [{ source_file: file.name, status: 'Failed', vendor_name: 'Error' }, ...prev]);
+        setData(prev => [{ source_file: file.name, status: 'Failed', vendor_name: 'Connection Error' }, ...prev]);
       }
     }
     setLoading(false);
-    setStatusMessage("Processing complete!");
+    setStatusMessage("All files processed and saved to Supabase.");
     setFiles([]);
   };
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
 
   const exportToExcel = () => {
     const worksheet = XLSX.utils.json_to_sheet(data);
@@ -75,21 +82,21 @@ function App() {
 
       <section className="dashboard-grid">
         <div className="kpi-card">
-          <h3>Total Processed</h3>
-          <p className="kpi-value">{data.filter(d => d.status === 'Processed').length}</p>
+          <span className="kpi-label">Total Processed</span>
+          <span className="kpi-value">{data.filter(d => d.status === 'Processed').length}</span>
         </div>
         <div className="kpi-card error">
-          <h3>Unprocessed / Failed</h3>
-          <p className="kpi-value">{data.filter(d => d.status === 'Failed').length}</p>
+          <span className="kpi-label">Processing Issues</span>
+          <span className="kpi-value">{data.filter(d => d.status === 'Failed').length}</span>
         </div>
         <div className="chart-container">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis />
+            <BarChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="date" tick={{fontSize: 10}} />
+              <YAxis tick={{fontSize: 10}} />
               <Tooltip />
-              <Bar dataKey="count" fill="#10b981" />
+              <Bar dataKey="count" fill="#10b981" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -97,7 +104,9 @@ function App() {
 
       <div {...getRootProps()} className={`dropzone-box ${isDragActive ? 'active' : ''}`}>
         <input {...getInputProps()} />
-        <p>{files.length > 0 ? `${files.length} files selected` : "Drag & drop invoices or click to browse"}</p>
+        <p className="dropzone-text">
+          {files.length > 0 ? `${files.length} files selected` : "Drag & drop invoices or click to browse"}
+        </p>
       </div>
 
       <div className="action-bar">
@@ -114,9 +123,9 @@ function App() {
           <table>
             <thead>
               <tr>
-                <th>Vendor</th>
-                <th>Date</th>
-                <th>Amount</th>
+                <th>Vendor Name</th>
+                <th>Invoice Date</th>
+                <th>Total Amount</th>
                 <th>Source File</th>
                 <th>Status</th>
               </tr>
@@ -124,10 +133,10 @@ function App() {
             <tbody>
               {data.map((row, i) => (
                 <tr key={i}>
-                  <td>{row.vendor_name || '---'}</td>
-                  <td>{row.invoice_date || '---'}</td>
-                  <td>{row.total_amount ? `$${row.total_amount}` : '---'}</td>
-                  <td>{row.source_file}</td>
+                  <td className="vendor-cell">{row.vendor_name}</td>
+                  <td>{row.invoice_date}</td>
+                  <td className="amount-cell">{row.total_amount ? `$${row.total_amount}` : '---'}</td>
+                  <td className="file-cell">{row.source_file}</td>
                   <td><span className={`badge ${row.status}`}>{row.status}</span></td>
                 </tr>
               ))}
@@ -135,6 +144,7 @@ function App() {
           </table>
         </div>
       </section>
+      {statusMessage && <div className="status-footer">{statusMessage}</div>}
     </div>
   );
 }
