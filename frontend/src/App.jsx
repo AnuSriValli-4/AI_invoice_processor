@@ -12,7 +12,6 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
 
-  //Count invoices by date
   const chartData = useMemo(() => {
     const counts = data.reduce((acc, curr) => {
       const date = curr.invoice_date || 'Unknown';
@@ -43,20 +42,19 @@ function App() {
         });
         const result = await response.json();
 
+        // FIX: Mapping result.data to the table state for correct tracking
         if (result.status === "Success") {
-          setData(prev => [...prev, { ...result.data, status: 'Processed' }]);
+          setData(prev => [{ ...result.data, status: 'Processed' }, ...prev]);
         } else {
-          setData(prev => [...prev, { source_file: file.name, status: 'Failed', vendor_name: 'Error' }]);
+          setData(prev => [{ source_file: file.name, status: 'Failed', vendor_name: 'Error' }, ...prev]);
         }
       } catch (error) {
-        console.error("Error uploading file:", file.name);
-        setData(prev => [...prev, { source_file: file.name, status: 'Failed', vendor_name: 'Error' }]);
+        setData(prev => [{ source_file: file.name, status: 'Failed', vendor_name: 'Error' }, ...prev]);
       }
     }
-    
     setLoading(false);
     setStatusMessage("Processing complete!");
-    setFiles([]); // Clear queue after processing
+    setFiles([]);
   };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
@@ -68,9 +66,6 @@ function App() {
     XLSX.writeFile(workbook, "Consolidated_Invoices.xlsx");
   };
 
-  const processedCount = data.filter(d => d.status === 'Processed').length;
-  const failedCount = data.filter(d => d.status === 'Failed').length;
-
   return (
     <div className="app-container">
       <header className="main-header">
@@ -78,20 +73,18 @@ function App() {
         <p>Enterprise Document Consolidation System</p>
       </header>
 
-      {/* KPI Dashboard Section */}
       <section className="dashboard-grid">
         <div className="kpi-card">
           <h3>Total Processed</h3>
-          <p className="kpi-value">{processedCount}</p>
+          <p className="kpi-value">{data.filter(d => d.status === 'Processed').length}</p>
         </div>
         <div className="kpi-card error">
-          <h3>Failed</h3>
-          <p className="kpi-value">{failedCount}</p>
+          <h3>Unprocessed / Failed</h3>
+          <p className="kpi-value">{data.filter(d => d.status === 'Failed').length}</p>
         </div>
         <div className="chart-container">
-          <h3>Volume Trend by Date</h3>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData}>
+            <BarChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" />
               <YAxis />
@@ -102,5 +95,48 @@ function App() {
         </div>
       </section>
 
-      {/* Upload Zone */}
-      <div {...getRootProps()} className={`dropzone-box ${isDragActive ? 'active' :
+      <div {...getRootProps()} className={`dropzone-box ${isDragActive ? 'active' : ''}`}>
+        <input {...getInputProps()} />
+        <p>{files.length > 0 ? `${files.length} files selected` : "Drag & drop invoices or click to browse"}</p>
+      </div>
+
+      <div className="action-bar">
+        <button className="process-btn" onClick={handleUpload} disabled={loading || files.length === 0}>
+          {loading ? "Processing..." : "Process Documents"}
+        </button>
+        <button className="download-btn" onClick={exportToExcel} disabled={data.length === 0}>
+          Download Excel Report
+        </button>
+      </div>
+
+      <section className="table-section">
+        <div className="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Vendor</th>
+                <th>Date</th>
+                <th>Amount</th>
+                <th>Source File</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((row, i) => (
+                <tr key={i}>
+                  <td>{row.vendor_name || '---'}</td>
+                  <td>{row.invoice_date || '---'}</td>
+                  <td>{row.total_amount ? `$${row.total_amount}` : '---'}</td>
+                  <td>{row.source_file}</td>
+                  <td><span className={`badge ${row.status}`}>{row.status}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export default App;
