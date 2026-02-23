@@ -44,8 +44,6 @@ SUPPORTED_EXTENSIONS = {
 }
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
 def parse_date(date_str: str):
     """Try many date formats. Returns ISO YYYY-MM-DD string or None."""
     if not date_str or str(date_str).strip() in ("", "Unknown", "N/A", "null", "None"):
@@ -63,7 +61,7 @@ def parse_date(date_str: str):
             return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
         except ValueError:
             continue
-    return None  # Never crash Supabase DATE column with a bad string
+    return None  
 
 
 def parse_float(value):
@@ -190,8 +188,8 @@ def sanitize_and_save(structured: dict, filename: str) -> dict:
     record = {
         "invoice_number": str(structured.get("invoice_number") or "N/A"),
         "vendor_name":    structured.get("vendor_name") or "Unknown",
-        "invoice_date":   parsed_date,   # None if unparseable — safe for Supabase DATE column
-        "amount":         pre_tax,       # pre-tax subtotal maps to "amount" column
+        "invoice_date":   parsed_date,   
+        "amount":         pre_tax,      
         "tax_amount":     tax,
         "total_amount":   total,
         "payment_status": payment_status,
@@ -209,7 +207,7 @@ def process_single_file(contents: bytes, filename: str) -> list:
     """
     ext = filename.lower().split(".")[-1]
 
-    # ── Excel (.xlsx / .xls) — each row = one invoice ──────────────────────
+
     if ext in ("xlsx", "xls"):
         wb = openpyxl.load_workbook(io.BytesIO(contents), data_only=True)
         ws = wb.active
@@ -220,7 +218,7 @@ def process_single_file(contents: bytes, filename: str) -> list:
         records = []
         for row in rows[1:]:
             if all(v is None or str(v).strip() == "" for v in row):
-                continue  # skip blank rows
+                continue  
             row_text = "\n".join(
                 f"{h}: {v}" for h, v in zip(headers, row)
                 if v is not None and str(v).strip() != ""
@@ -230,7 +228,7 @@ def process_single_file(contents: bytes, filename: str) -> list:
             records.append({**record, "status": "Processed"})
         return records
 
-    # ── CSV — each row = one invoice ────────────────────────────────────────
+   
     if ext == "csv":
         text = contents.decode("utf-8", errors="replace")
         reader = csv.DictReader(io.StringIO(text))
@@ -246,7 +244,7 @@ def process_single_file(contents: bytes, filename: str) -> list:
             records.append({**record, "status": "Processed"})
         return records
 
-    # ── PDF — render first page as image ────────────────────────────────────
+   
     if ext == "pdf":
         if not PDF_SUPPORT:
             raise ValueError("PDF support not available — add 'pymupdf' to requirements.txt and redeploy.")
@@ -255,14 +253,13 @@ def process_single_file(contents: bytes, filename: str) -> list:
         record = sanitize_and_save(structured, filename)
         return [{**record, "status": "Processed"}]
 
-    # ── Image (PNG, JPG, WEBP, TIFF, BMP, GIF) ─────────────────────────────
+   
     b64, media_type = image_to_base64(contents, filename)
     structured = call_vision_model(b64, media_type)
     record = sanitize_and_save(structured, filename)
     return [{**record, "status": "Processed"}]
 
 
-# ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.get("/")
 def home():
@@ -297,7 +294,7 @@ async def process_document(file: UploadFile = File(...)):
     filename = file.filename or "upload"
     ext = filename.lower().split(".")[-1]
 
-    # ── ZIP: unpack and process every valid file inside ─────────────────────
+
     if ext == "zip":
         if not zipfile.is_zipfile(io.BytesIO(contents)):
             raise HTTPException(status_code=400, detail="Invalid or corrupted ZIP file.")
@@ -307,7 +304,7 @@ async def process_document(file: UploadFile = File(...)):
 
         with zipfile.ZipFile(io.BytesIO(contents)) as zf:
             for name in zf.namelist():
-                # Skip macOS metadata folders and hidden files
+               
                 if name.startswith("__") or name.startswith(".") or name.endswith("/"):
                     continue
                 inner_ext = name.lower().split(".")[-1]
@@ -316,7 +313,7 @@ async def process_document(file: UploadFile = File(...)):
                     continue
                 try:
                     inner_contents = zf.read(name)
-                    inner_filename = name.split("/")[-1]  # strip folder path
+                    inner_filename = name.split("/")[-1]  
                     records = process_single_file(inner_contents, inner_filename)
                     all_results.extend(records)
                 except Exception as e:
@@ -334,14 +331,13 @@ async def process_document(file: UploadFile = File(...)):
             "results": all_results,
         }
 
-    # ── Single unsupported file type ────────────────────────────────────────
+  
     if ext not in SUPPORTED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
             detail=f"Unsupported file type '.{ext}'. Supported: {', '.join(sorted(SUPPORTED_EXTENSIONS))}, zip."
         )
 
-    # ── Single supported file ───────────────────────────────────────────────
     try:
         records = process_single_file(contents, filename)
     except ValueError as e:
@@ -349,11 +345,11 @@ async def process_document(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
 
-    # Single-record response (images, PDFs) — keeps frontend compatibility
+  
     if len(records) == 1:
         return {"status": "Success", "data": records[0]}
 
-    # Multi-record response (Excel, CSV with multiple rows)
+   
     return {
         "status": "Success",
         "processed": len([r for r in records if r.get("status") == "Processed"]),
