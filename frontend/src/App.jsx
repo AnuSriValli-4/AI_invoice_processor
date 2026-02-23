@@ -181,12 +181,12 @@ export default function App() {
         <div className="header-inner">
           <div className="header-icon"><FileText size={20} /></div>
           <div>
-            <h1>AI Invoice Intelligence</h1>
-            <p>Enterprise Document Consolidation System</p>
+            <h1>Invoice Consolidation System</h1>
           </div>
         </div>
       </header>
 
+      {/* KPI Row */}
       <div className="kpi-row">
         <div className="kpi-card">
           <div className="kpi-icon success-icon"><CheckCircle2 size={16} /></div>
@@ -211,6 +211,7 @@ export default function App() {
         </div>
       </div>
 
+      {/* Chart */}
       <div className="chart-section">
         <p className="chart-title">Invoices by Date</p>
         {chartData.length === 0 ? (
@@ -234,6 +235,7 @@ export default function App() {
         )}
       </div>
 
+      {/* Upload Zone */}
       <div
         {...getRootProps()}
         className={`dropzone-box ${isDragActive ? 'dropzone-active' : ''} ${files.length > 0 ? 'dropzone-ready' : ''}`}
@@ -250,6 +252,7 @@ export default function App() {
         <p className="dropzone-hint">Supports PNG, JPG, TIFF, WEBP, BMP, PDF, Excel, CSV, ZIP</p>
       </div>
 
+      {/* Progress Bar */}
       {loading && (
         <div className="progress-wrapper">
           <div className="progress-info">
@@ -262,6 +265,7 @@ export default function App() {
         </div>
       )}
 
+      {/* Actions */}
       <div className="action-bar">
         <button className="process-btn" onClick={handleUpload} disabled={loading || files.length === 0}>
           {loading ? (
@@ -279,6 +283,7 @@ export default function App() {
 
       </div>
 
+      {/* Status Banner */}
       {statusMessage && (
         <div className={`status-banner status-${statusType}`}>
           {statusType === 'success' && <CheckCircle2 size={13} />}
@@ -287,6 +292,7 @@ export default function App() {
         </div>
       )}
 
+      {/* Table */}
       <div className="table-wrapper">
         <table>
           <thead>
