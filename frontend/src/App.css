@@ -1,4 +1,3 @@
-/* ─── Reset & Base ─────────────────────────────────────────── */
 :root {
   --accent:      #10b981;
   --accent-dark: #059669;
@@ -28,7 +27,6 @@ html {
   overflow: hidden;
 }
 
-/* ─── App Shell ─────────────────────────────────────────────── */
 .app-container {
   max-width: 100%;
   height: 100vh;
@@ -40,7 +38,6 @@ html {
   overflow: hidden;
 }
 
-/* ─── Header ────────────────────────────────────────────────── */
 .main-header {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -81,7 +78,6 @@ html {
   margin-top: 2px;
 }
 
-/* ─── KPI Row ───────────────────────────────────────────────── */
 .kpi-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -135,7 +131,6 @@ html {
 .error-value { color: var(--error); }
 .money-value { color: #3b82f6; font-size: 1.3rem; }
 
-/* ─── Chart Section ─────────────────────────────────────────── */
 .chart-section {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -172,7 +167,6 @@ html {
 .tooltip-date  { font-size: 10px; color: #94a3b8; margin-bottom: 2px; }
 .tooltip-value { font-size: 13px; font-weight: 700; color: #fff; }
 
-/* ─── Dropzone ──────────────────────────────────────────────── */
 .dropzone-box {
   border: 2px dashed var(--border);
   background: var(--surface);
@@ -221,7 +215,6 @@ html {
   color: var(--muted);
 }
 
-/* ─── Action Bar ────────────────────────────────────────────── */
 .action-bar {
   display: flex;
   gap: 10px;
@@ -290,7 +283,6 @@ html {
 .download-btn:hover:not(:disabled) { background: #334155; }
 .download-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-/* ─── Status Banner ─────────────────────────────────────────── */
 .status-banner {
   display: flex;
   align-items: center;
@@ -308,7 +300,6 @@ html {
 .status-success { background: var(--accent-light); color: var(--accent-dark); border: 1px solid #6ee7b7; }
 .status-error   { background: var(--error-light);  color: var(--error);       border: 1px solid #fca5a5; }
 
-/* ─── Table ─────────────────────────────────────────────────── */
 .table-wrapper {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -365,7 +356,6 @@ tr:hover td { background: #f8fafc; }
   font-size: 0.82rem;
 }
 
-/* ─── Badges ────────────────────────────────────────────────── */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -378,7 +368,6 @@ tr:hover td { background: #f8fafc; }
   white-space: nowrap;
 }
 
-/* Status badges */
 .badge-processed { background: var(--accent-light); color: var(--accent-dark); }
 .badge-failed    { background: var(--error-light);  color: var(--error); }
 .badge-pending   { background: #fef3c7; color: #92400e; }
@@ -391,14 +380,12 @@ tr:hover td { background: #f8fafc; }
 .badge-overdue  { color: var(--error); font-weight: 800; }
 .badge-unknown  { color: var(--muted); }
 
-/* ─── Responsive ────────────────────────────────────────────── */
 @media (max-width: 640px) {
   .kpi-row { grid-template-columns: repeat(2, 1fr); }
   .kpi-row .kpi-card:last-child { grid-column: 1 / -1; }
   .app-container { padding: 12px 14px 30px; }
 }
 
-/* ─── Progress Bar ──────────────────────────────────────────── */
 .progress-wrapper {
   background: var(--surface);
   border: 1px solid var(--border);
