@@ -179,9 +179,35 @@ async def process_document(file: UploadFile = File(...)):
     try:
         supabase.table("invoices").insert(record).execute()
     except Exception as e:
-        raise HTTPException(status_code(500), detail=f"Database save failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Database save failed: {str(e)}")
 
     return {"status": "Success", "data": {**record, "status": "Processed"}}
+
+
+@app.get("/health")
+def health_check():
+    """Hit this URL in your browser to diagnose backend issues."""
+    results = {"server": "ok", "pdf_support": PDF_SUPPORT}
+
+    # Test Tesseract
+    try:
+        version = pytesseract.get_tesseract_version()
+        results["tesseract"] = f"ok (v{version})"
+    except Exception as e:
+        results["tesseract"] = f"ERROR: {str(e)}"
+
+    # Test Supabase connection
+    try:
+        supabase.table("invoices").select("id").limit(1).execute()
+        results["supabase"] = "ok"
+    except Exception as e:
+        results["supabase"] = f"ERROR: {str(e)}"
+
+    # Test Groq key is set
+    results["groq_key_set"] = bool(GROQ_API_KEY)
+
+    return results
+
 
 
 @app.get("/invoices")
